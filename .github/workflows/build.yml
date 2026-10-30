@@ -11,6 +11,8 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Check out
         uses: actions/checkout@v4
@@ -75,3 +77,12 @@ jobs:
           name: upload-keystore-preserve-me
           path: ${{ runner.temp }}/upload-keystore.jks
           retention-days: 90
+
+      - name: Publish bundle as a GitHub Release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="v1.0-build${GITHUB_RUN_NUMBER}"
+          gh release create "$TAG" app/build/outputs/bundle/release/app-release.aab \
+            --title "Focus Timer $TAG" \
+            --notes "Signed release AAB from GitHub Actions run ${GITHUB_RUN_NUMBER}. Upload app-release.aab to Play Console."
