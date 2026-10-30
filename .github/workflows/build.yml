@@ -5,6 +5,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+env:
+  HAS_KEYSTORE: ${{ secrets.KEYSTORE_PASSWORD != '' }}
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -66,7 +69,7 @@ jobs:
           retention-days: 90
 
       - name: Upload generated keystore (first run only — keep this safe!)
-        if: ${{ secrets.KEYSTORE_PASSWORD == '' }}
+        if: env.HAS_KEYSTORE == 'false'
         uses: actions/upload-artifact@v4
         with:
           name: upload-keystore-preserve-me
