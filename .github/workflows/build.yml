@@ -1,0 +1,74 @@
+name: Build release AAB
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.14.3"
+
+      - name: Generate upload keystore (first run only)
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_PASSWORD" ]; then
+            echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/upload-keystore.jks"
+          else
+            keytool -genkeypair -v \
+              -keystore "$RUNNER_TEMP/upload-keystore.jks" \
+              -alias upload \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass "shadowbox-upload-temp" -keypass "shadowbox-upload-temp" \
+              -dname "CN=ShadowBox Studios, O=ShadowBox Studios, C=IN"
+          fi
+
+      - name: Build signed release bundle
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_PASSWORD" ]; then
+            export KEYSTORE_PATH="$RUNNER_TEMP/upload-keystore.jks"
+            export KEY_ALIAS="upload"
+            echo "Signing with the stored upload key."
+          else
+            export KEYSTORE_PATH="$RUNNER_TEMP/upload-keystore.jks"
+            export KEYSTORE_PASSWORD="shadowbox-upload-temp"
+            export KEY_PASSWORD="shadowbox-upload-temp"
+            export KEY_ALIAS="upload"
+            echo "Signing with a freshly generated upload key (preserve the artifact!)."
+          fi
+          gradle :app:bundleRelease --stacktrace
+
+      - name: Upload bundle artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: focus-timer-release
+          path: |
+            app/build/outputs/bundle/release/app-release.aab
+          retention-days: 90
+
+      - name: Upload generated keystore (first run only — keep this safe!)
+        if: ${{ secrets.KEYSTORE_PASSWORD == '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: upload-keystore-preserve-me
+          path: ${{ runner.temp }}/upload-keystore.jks
+          retention-days: 90
